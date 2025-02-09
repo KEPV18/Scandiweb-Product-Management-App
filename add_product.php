@@ -1,65 +1,80 @@
 <?php
+session_start(); // Start session for error messages
+require 'db.php'; // Database connection
+require 'ProductClasses.php'; // Product classes
+require 'RequestHandler.php'; // Request handling
 
-require 'db.php'; // ملف الاتصال بقاعدة البيانات
-require 'ProductClasses.php'; // ملف الفئات
-
-// إعداد الاتصال بقاعدة البيانات
+// Initialize the database connection
 Product::setConnection($pdo);
 
-// التحقق من وجود بيانات في POST
+// Check if the form was submitted via POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $sku = $_POST['sku'];
-    $name = $_POST['name'];
-    $price = $_POST['price'];
-    $productType = $_POST['productType'];
+    try {
+        // Get form data using RequestHandler
+        $data = RequestHandler::getPostData(['sku', 'name', 'price', 'productType', 'size', 'weight', 'height', 'width', 'length']);
+        
+        // Extract required fields
+        $sku = $data['sku'];
+        $name = $data['name'];
+        $price = $data['price'];
+        $productType = $data['productType'];
 
-    // Check if SKU already exists
-    $query = "SELECT * FROM products WHERE sku = ?";
-    $stmt = $pdo->prepare($query);
-    $stmt->execute([$sku]);
+        // Validate required fields
+        if (empty($sku) || empty($name) || empty($price) || empty($productType)) {
+            throw new Exception("Please submit all required data.");
+        }
 
-    if ($stmt->rowCount() > 0) {
-        // SKU already exists
-        $error = "SKU already exists. Please use a different SKU.";
-        header("Location: add_product_page.php?error=" . urlencode($error));
+        // Create the product object using the factory pattern
+        $attributes = [];
+        switch ($productType) {
+            case 'DVD':
+                if (empty($data['size']) || !is_numeric($data['size'])) {
+                    throw new Exception("Please provide a valid size for DVD.");
+                }
+                $attributes['size'] = $data['size'];
+                break;
+            case 'Book':
+                if (empty($data['weight']) || !is_numeric($data['weight'])) {
+                    throw new Exception("Please provide a valid weight for Book.");
+                }
+                $attributes['weight'] = $data['weight'];
+                break;
+            case 'Furniture':
+                if (empty($data['height']) || empty($data['width']) || empty($data['length']) ||
+                    !is_numeric($data['height']) || !is_numeric($data['width']) || !is_numeric($data['length'])) {
+                    throw new Exception("Please provide valid dimensions for Furniture.");
+                }
+                $attributes['height'] = $data['height'];
+                $attributes['width'] = $data['width'];
+                $attributes['length'] = $data['length'];
+                break;
+            default:
+                throw new Exception("Invalid product type!");
+        }
+
+        // Create the product instance
+        $product = ProductFactory::create($productType, $sku, $name, $price, $attributes);
+
+        // Use setters to set attributes
+        $product->setSku($sku);
+        $product->setName($name);
+        $product->setPrice($price);
+        foreach ($attributes as $key => $value) {
+            $product->{"set" . ucfirst($key)}($value);
+        }
+
+        // Save the product to the database
+        $product->save();
+
+        // Redirect to the product list page with success message
+        $_SESSION['success'] = "Product added successfully!";
+        header('Location: index.php');
+        exit;
+
+    } catch (Exception $e) {
+        // Store the error message in the session and redirect back to the add product page
+        $_SESSION['error'] = $e->getMessage();
+        header('Location: add_product_page.php');
         exit;
     }
-
-    // إنشاء الكائن المناسب بناءً على نوع المنتج
-    switch ($productType) {
-        case 'DVD':
-            $size = $_POST['size'];
-            $product = new DVD($sku, $name, $price, $size);
-            break;
-        case 'Book':
-            $weight = $_POST['weight'];
-            $product = new Book($sku, $name, $price, $weight);
-            break;
-        case 'Furniture':
-            $height = $_POST['height'];
-            $width = $_POST['width'];
-            $length = $_POST['length'];
-            $product = new Furniture($sku, $name, $price, $height, $width, $length);
-            break;
-        default:
-            echo "Invalid product type!";
-            exit;
-    }
-
-    try {
-        // محاولة حفظ المنتج في قاعدة البيانات
-        $product->save();
-        // إعادة توجيه المستخدم مع رسالة نجاح
-        header('Location: index.php?success=1');
-    } catch (PDOException $e) {
-        // التحقق من نوع الخطأ
-        if ($e->getCode() == 1062) {
-            $errorMessage = "The SKU you entered already exists. Please enter a unique SKU.";
-        } else {
-            $errorMessage = "An error occurred while adding the product. Please try again.";
-        }
-        // إعادة توجيه المستخدم مع رسالة خطأ
-        header('Location: Add%20Product%20Page.php?error=' . urlencode($errorMessage));
-    }
-    exit;
 }

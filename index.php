@@ -1,10 +1,31 @@
 <?php
-// الاتصال بقاعدة البيانات
-require 'db.php';
+session_start(); // Start session for messages
+require 'db.php'; // Database connection
+require 'ProductClasses.php'; // Product classes
 
-// جلب المنتجات من قاعدة البيانات
-$stmt = $pdo->query("SELECT * FROM products");
-$products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+// Fetch products from the database
+try {
+    $stmt = $pdo->query("SELECT * FROM products ORDER BY id ASC");
+    $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
+} catch (PDOException $e) {
+    die("Database error: " . $e->getMessage());
+}
+
+// Handle mass delete action
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['mass_delete'])) {
+    if (isset($_POST['product_ids']) && is_array($_POST['product_ids'])) {
+        $productIds = array_map('intval', $_POST['product_ids']);
+        try {
+            $stmt = $pdo->prepare("DELETE FROM products WHERE id IN (" . implode(',', $productIds) . ")");
+            $stmt->execute();
+            $_SESSION['success'] = "Selected products deleted successfully!";
+        } catch (PDOException $e) {
+            $_SESSION['error'] = "An error occurred while deleting products.";
+        }
+    }
+    header('Location: index.php');
+    exit;
+}
 ?>
 
 <!DOCTYPE html>
@@ -13,26 +34,35 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-    <script src="https://unpkg.com/unlazy@0.11.3/dist/unlazy.with-hashing.iife.js" defer init></script>
-        <!-- نقل إعدادات Tailwind إلى ملف خارجي -->
-        <script src="tailwind-config.js"></script>
     <link rel="stylesheet" href="styles.css">
+    <title>Product List</title>
 </head>
 <body>
 <div class="min-h-screen bg-background text-foreground p-4">
     <div class="max-w-7xl mx-auto">
+        <!-- Display success or error messages -->
+        <?php if (isset($_SESSION['success'])): ?>
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+                <?php echo htmlspecialchars($_SESSION['success']); unset($_SESSION['success']); ?>
+            </div>
+        <?php endif; ?>
+        <?php if (isset($_SESSION['error'])): ?>
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+                <?php echo htmlspecialchars($_SESSION['error']); unset($_SESSION['error']); ?>
+            </div>
+        <?php endif; ?>
+
         <div class="flex justify-between items-center mb-4">
             <h1 class="text-4xl font-bold text-primary">Product List</h1>
             <div class="flex items-center space-x-4">
                 <button class="bg-accent text-accent-foreground hover:bg-accent/80 px-4 py-2 rounded shadow-md flex items-center transition duration-200"
-                        onclick="window.location.href='Add Product Page.php'">
+                        onclick="window.location.href='add_product_page.php'">
                     <img aria-hidden="true" alt="add-icon" src="https://openui.fly.dev/openui/24x24.svg?text=➕" class="mr-2"/>
                     ADD
                 </button>
-                <form method="POST" action="product_actions.php" id="mass-delete-form"> <!-- Added form ID -->
+                <form method="POST" action="index.php" id="mass-delete-form">
                     <input type="hidden" name="mass_delete" value="1">
-                    <input type="hidden" name="product_ids[]" id="product-ids">
-                    <button type="button" id="delete-product-btn" class="bg-destructive text-destructive-foreground hover:bg-destructive/80 px-4 py-2 rounded shadow-md flex items-center transition duration-200">
+                    <button type="submit" id="delete-product-btn" class="bg-destructive text-destructive-foreground hover:bg-destructive/80 px-4 py-2 rounded shadow-md flex items-center transition duration-200">
                         <img aria-hidden="true" alt="delete-icon" src="https://openui.fly.dev/openui/24x24.svg?text=🗑️" class="mr-2"/>
                         MASS DELETE
                     </button>
@@ -48,17 +78,18 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                     <p class="text-muted-foreground mb-2">Price: $<?php echo htmlspecialchars($product['price']); ?></p>
                     <p class="text-muted-foreground mb-2">
                         <?php
-                        if ($product['product_type'] == 'DVD') {
-                            echo 'Size: ' . htmlspecialchars($product['size']) . ' MB';
-                        } elseif ($product['product_type'] == 'Book') {
-                            echo 'Weight: ' . htmlspecialchars($product['weight']) . ' KG';
-                        } elseif ($product['product_type'] == 'Furniture') {
-                            echo 'Dimensions: ' . htmlspecialchars($product['height']) . 'x' . htmlspecialchars($product['width']) . 'x' . htmlspecialchars($product['length']) . ' CM';
+                        $attributes = json_decode($product['attributes'], true);
+                        if ($product['type'] == 'DVD') {
+                            echo 'Size: ' . htmlspecialchars($attributes['size']) . ' MB';
+                        } elseif ($product['type'] == 'Book') {
+                            echo 'Weight: ' . htmlspecialchars($attributes['weight']) . ' KG';
+                        } elseif ($product['type'] == 'Furniture') {
+                            echo 'Dimensions: ' . htmlspecialchars($attributes['height']) . 'x' . htmlspecialchars($attributes['width']) . 'x' . htmlspecialchars($attributes['length']) . ' CM';
                         }
                         ?>
                     </p>
                     <div class="flex justify-between items-center mt-2">
-                        <input type="checkbox" class="delete-checkbox" value="<?php echo htmlspecialchars($product['id']); ?>">
+                        <input type="checkbox" class="delete-checkbox" name="product_ids[]" value="<?php echo htmlspecialchars($product['id']); ?>">
                         <div class="flex space-x-2">
                             <button class="bg-accent text-accent-foreground hover:bg-accent/80 px-2 py-1 rounded transition duration-200 edit-button">
                                 <img aria-hidden="true" alt="edit-icon" src="https://openui.fly.dev/openui/24x24.svg?text=✏️"/>
@@ -71,25 +102,28 @@ $products = $stmt->fetchAll(PDO::FETCH_ASSOC);
                             </form>
                         </div>
                     </div>
-                    <form method="POST" action="product_actions.php" class="hidden edit-form mt-4">
-                        <input type="hidden" name="edit_id" value="<?php echo htmlspecialchars($product['id']); ?>">
-                        <input type="text" name="new_name" value="<?php echo htmlspecialchars($product['name']); ?>" placeholder="New Name" class="bg-input border border-border rounded-md p-2 mb-2 w-full">
-                        <input type="number" name="new_price" value="<?php echo htmlspecialchars($product['price']); ?>" placeholder="New Price" class="bg-input border border-border rounded-md p-2 mb-2 w-full">
-                        <div class="flex justify-between">
-                            <button type="submit" class="bg-primary text-primary-foreground hover:bg-primary/80 px-4 py-2 rounded transition duration-200">Save</button>
-                            <button type="button" class="bg-muted text-muted-foreground hover:bg-muted/80 px-4 py-2 rounded transition duration-200 cancel-button">Cancel</button>
-                        </div>
-                    </form>
                 </div>
             <?php endforeach; ?>
         </div>
     </div>
 </div>
 
-<!-- سكريبت التفاعل مع الواجهة -->
-<script src="main.js"></script>
 <footer class="bg-gray-100 text-center py-4 absolute bottom-0 w-full">
     <p class="text-gray-600">Scandiweb Test assignment</p>
 </footer>
+
+<!-- JavaScript for UI interactions -->
+<script>
+    document.getElementById('mass-delete-form').addEventListener('submit', function (event) {
+        const checkboxes = document.querySelectorAll('.delete-checkbox:checked');
+        if (checkboxes.length === 0) {
+            event.preventDefault();
+            alert('Please select at least one product to delete.');
+        } else {
+            const productIds = Array.from(checkboxes).map(checkbox => checkbox.value);
+            document.querySelector('#mass-delete-form input[name="product_ids[]"]').value = JSON.stringify(productIds);
+        }
+    });
+</script>
 </body>
 </html>

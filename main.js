@@ -1,55 +1,41 @@
-document.addEventListener('DOMContentLoaded', function() {
-    document.getElementById('delete-product-btn').addEventListener('click', function() {
-        const selectedProducts = Array.from(document.querySelectorAll('.delete-checkbox:checked')).map(cb => cb.value);
-        if (selectedProducts.length > 0) {
-            const form = document.getElementById('mass-delete-form');
-            // إزالة أي مدخلات مخفية سابقة لتجنب التكرار
-            document.querySelectorAll('input[name="product_ids[]"]').forEach(input => input.remove());
-
-            // إضافة معرفات المنتجات المحددة كمصفوفة
-            selectedProducts.forEach(id => {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = 'product_ids[]'; // تأكد من أن الاسم هو نفسه
-                input.value = id;
-                form.appendChild(input);
-            });
-
-            // إرسال النموذج
-            form.submit();
-        } 
-        // else { // إزالة رسالة التنبيه
-        //     alert('يرجى تحديد منتج واحد على الأقل للحذف.'); // تم التعليق على هذه السطر
-        // }
+document.addEventListener('DOMContentLoaded', function () {
+    // Handle mass delete button click
+    document.querySelector('form[method="POST"]').addEventListener('submit', function (e) {
+        const checkboxes = document.querySelectorAll('input[name="product_ids[]"]:checked');
+        if (checkboxes.length === 0) {
+            e.preventDefault(); // Prevent form submission
+            // Display an error message instead of using alert()
+            const errorMessage = document.createElement('div');
+            errorMessage.className = 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4';
+            errorMessage.textContent = 'Please select at least one product to delete.';
+            document.body.insertBefore(errorMessage, document.body.firstChild);
+        }
     });
-});
 
-
-        // Toggle edit form visibility
-        document.querySelectorAll('.edit-button').forEach(button => {
-            button.addEventListener('click', function() {
-                const card = this.closest('.bg-card'); // العثور على الحاوية (البطاقة) التي تحتوي على الزر والنموذج
-                const editForm = card.querySelector('.edit-form'); // العثور على النموذج داخل هذه الحاوية
-                console.log('Edit Form:', editForm); // سجل للتحقق من وجود النموذج
-                if (editForm) { // تحقق من وجود النموذج
-                    editForm.classList.toggle('hidden'); // إظهار أو إخفاء النموذج
-                }
-            });
+    // Toggle edit form visibility
+    document.querySelectorAll('.edit-button').forEach(button => {
+        button.addEventListener('click', function () {
+            const card = this.closest('.bg-card'); // Find the parent card container
+            const editForm = card.querySelector('.edit-form'); // Find the edit form inside the card
+            if (editForm) {
+                editForm.classList.toggle('hidden'); // Toggle visibility of the edit form
+            }
         });
-
-        // Cancel button functionality
-        document.querySelectorAll('.cancel-button').forEach(button => {
-            button.addEventListener('click', function() {
-                const editForm = this.closest('.edit-form'); // العثور على النموذج
-                console.log('Cancel Edit Form:', editForm); // سجل للتحقق من وجود النموذج
-                if (editForm) { // تحقق من وجود النموذج
-                    editForm.classList.add('hidden'); // إخفاء النموذج عند النقر على "Cancel"
-                }
-            });
-        }); // {{ edit_1 }} إزالة القوس الزائد هنا
-
-    // عند تحميل الصفحة، تأكد من أن عرض البطاقات هو العرض الافتراضي
-    document.addEventListener('DOMContentLoaded', function() {
-        const cardsView = document.getElementById('cards-view');
-        cardsView.classList.remove('hidden'); // إظهار عرض البطاقات
     });
+
+    // Cancel button functionality
+    document.querySelectorAll('.cancel-button').forEach(button => {
+        button.addEventListener('click', function () {
+            const editForm = this.closest('.edit-form'); // Find the closest edit form
+            if (editForm) {
+                editForm.classList.add('hidden'); // Hide the edit form
+            }
+        });
+    });
+
+    // Ensure cards view is visible on page load
+    const cardsView = document.getElementById('cards-view');
+    if (cardsView) {
+        cardsView.classList.remove('hidden'); // Make sure the cards view is visible
+    }
+});
